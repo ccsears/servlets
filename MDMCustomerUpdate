@@ -1,0 +1,768 @@
+package servlet;
+
+import java.io.IOException;
+import java.text.ParseException;
+import java.util.ArrayList;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import properties.PropertiesFileReader;
+
+import com.ibm.www.xmlns.prod.websphere.wcc.business.schema.Interaction;
+import com.ibm.www.xmlns.prod.websphere.wcc.business.schema.InteractionStatusType;
+import com.ibm.www.xmlns.prod.websphere.wcc.business.schema.PrivPrefReasonType;
+import com.ibm.www.xmlns.prod.websphere.wcc.common.intf.schema.Control;
+import com.ibm.www.xmlns.prod.websphere.wcc.common.intf.schema.ProcessingException;
+import com.ibm.www.xmlns.prod.websphere.wcc.common.schema.LanguageType;
+import com.ibm.www.xmlns.prod.websphere.wcc.common.schema.Message;
+import com.ibm.www.xmlns.prod.websphere.wcc.common.schema.Status;
+import com.ibm.www.xmlns.prod.websphere.wcc.financial.schema.Contract;
+import com.ibm.www.xmlns.prod.websphere.wcc.financial.schema.ContractComponent;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.AddressUsageType;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.AdminSystemType;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.ContactMethod;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.ContactMethodType;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.ContactMethodUsageType;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.GenderType;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.PartyAddress;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.PartyAdminSysKey;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.PartyContactMethod;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.PartyPrivPref;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.CountryType;
+import com.ibm.www.xmlns.prod.websphere.wcc.party.schema.UndeliveredReasonType;
+
+import composite.hub.gme.com.hubcomposite.intf.schema.GMEHubContactResponse;
+import composite.hub.gme.com.hubcomposite.port.HubCompositeServiceProxy;
+import composite.hub.gme.com.hubcomposite.schema.GMEHubContact;
+
+import extension.hub.gme.com.XAddress;
+import extension.hub.gme.com.XPerson;
+import extension.hub.gme.com.XPersonName;
+import extension.hub.gme.com.XVehicleHolding;
+
+import fileIO.FileIO;
+import datalist.MDMCustomerRec;
+
+/**
+ * Servlet implementation class MDMCustomerUpdate
+ */
+public class MDMCustomerUpdate extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+       
+  /**
+   * @see HttpServlet#HttpServlet()
+   */
+  public MDMCustomerUpdate() {
+      super();
+      // TODO Auto-generated constructor stub
+  }
+
+	/**
+	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    Control control = new Control();
+    GMEHubContact contact = new GMEHubContact();
+		HubCompositeServiceProxy hubCompositeServiceProxy = new HubCompositeServiceProxy();
+    PropertiesFileReader pfr = new PropertiesFileReader();
+    String strUrl = pfr.getProperty("HubCompService", "MDM") + "/services/HubCompositeService/HubCompositePort";
+    hubCompositeServiceProxy.setEndpoint(strUrl);
+		// Set up input record variables
+    ArrayList<String> custRecListOut = new ArrayList<String>();    
+		ArrayList<String> custRecListIn = new ArrayList<String>();
+    MDMCustomerRec custRec = new MDMCustomerRec();
+    
+	  System.out.println("Start HubCompService");
+		
+	  // setup Control Information
+		Long requestId = Long.valueOf(602004);  // can be unique value
+		control.setRequestId(requestId);
+		control.setRequesterName("CAC");
+		control.setRequesterLanguage(100);
+
+	  // Get the passed parameters from prior service
+    custRecListIn = (ArrayList<String>) request.getAttribute("list");
+//    custRecListOut.addAll(custRecListIn);
+	  
+    int recordNumber = custRecListIn.size();
+    for (int i = 0; i < recordNumber; i++) {
+      String custRecLine = (String) custRecListIn.get(i);
+      try {
+      	custRec = new MDMCustomerRec();
+				custRec.parseRecord(custRecLine);
+				contact = new GMEHubContact();
+								
+		    XPerson xPerson = new XPerson();
+		    
+				// Contact
+		    LanguageType languageType = setLanguage(custRec);
+		    if (languageType != null) {
+		    	xPerson.setPreferredLanguage(languageType); // Preferred Language
+		    }
+
+				xPerson.setCountry(setPersonCountry(custRec));  // Required MDM field
+ 
+		    if (custRec.getGuid().trim().length() != 0) {
+		    	Long guid = Long.valueOf(custRec.getGuid());
+		    	xPerson.setGuid(guid); // guid
+		    }
+
+				PartyContactMethod[] partyContactMethod = setPartyContactMethod(custRec);
+		    if (partyContactMethod != null) {
+					xPerson.setContactMethod(partyContactMethod);
+		    }
+		
+		    // CAC Open Case Flag (Open, Closed, Canceled)
+		    if (custRec.getCacOpenCase().equalsIgnoreCase("Open")) {
+			    xPerson.setSolicitationIndicator(true);	
+		    } else {
+		      xPerson.setSolicitationIndicator(false);
+		    }
+				
+		    GenderType gender = setGender(custRec);
+		    if (gender != null) {
+					xPerson.setGender(gender); // Gender
+		    }
+				
+				XPersonName[] xPersonName = setXPersonName(custRec);
+		    if (xPersonName != null) {
+					xPerson.setName(xPersonName); // Person Name components
+		    }
+				
+				PartyAdminSysKey[] partyAdminSysKey = setPartyAdminSysKey(custRec);
+				if (partyAdminSysKey != null) {
+					xPerson.setAdminContEquiv(partyAdminSysKey);
+				}
+
+				PartyAddress[] partyAddress = setPartyAddress(custRec);
+				if (partyAddress != null) {
+					xPerson.setAddress(partyAddress);
+				}
+				
+				PartyPrivPref[] partyPrivPref = setPartyPrivPref(custRec);
+				if (partyPrivPref != null) {
+					xPerson.setPrivPref(partyPrivPref);
+				}
+
+		// set contact person info
+				contact.setHubPerson(xPerson);
+				
+		// Vehicle
+				XVehicleHolding xVehicleHolding = setXVehicleHolding(custRec);
+				if (xVehicleHolding != null) {
+					ContractComponent[] contractComponent = new ContractComponent[1];
+					contractComponent[0] = new ContractComponent();
+					contractComponent[0].setHolding(xVehicleHolding);
+
+					Contract[] contract = new Contract[1];
+					contract[0] = new Contract();
+					contract[0].setComponent(contractComponent);
+				
+					contact.setHubContract(contract);
+				}
+				
+		// Set Interaction section
+				Interaction[] interaction = setInteraction(custRec);
+				contact.setHubContactInteraction(interaction);
+	
+		// Call MDM
+				//if GUID exists or (no GUID and there is a vehicle)
+				if (custRec.getGuid().trim().length() != 0 ||
+						((custRec.getGuid().trim().length() == 0 &&
+								(custRec.getFirstName().trim().length() != 0 ||
+								custRec.getMiddleName().trim().length() != 0 ||
+								custRec.getLastName().trim().length() != 0)) &&
+							custRec.getVin().trim().length() != 0)) {
+
+		      GMEHubContactResponse maintainHubContact_Response = hubCompositeServiceProxy.maintainHubContact(control, contact);
+
+					maintainHubContact_Response.getControl();
+					maintainHubContact_Response.getResponse();
+					maintainHubContact_Response.getStatus();
+					Status status = maintainHubContact_Response.getStatus();
+					System.out.println("**** SUCCESS ****");
+					System.out.println("Status Code:  " + status.getProcessingStatus().getCode());
+					System.out.println("Status Message:  " + status.getProcessingStatus().get_value());
+					System.out.println("Worked data:  " + custRecLine);
+				} else {
+					System.out.println("**** DATA FILTERED ****");
+					System.out.println("Record has no GUID or no GUID and no VIN");
+					System.out.println("Filtered data:  " + custRecLine);
+				}
+
+			} catch (ProcessingException pe) {
+				Message[] aMessage = pe.getApplicationMessage();
+				try {
+					if (aMessage[0].getDescription(0) != null) {
+						// System error, write record to guaranteed delivery file
+						custRecListOut.add(custRecLine);
+						System.out.println("**** MDM INTERNAL DATA ERROR ****");
+						System.out.println("Description: "  + aMessage[0].getDescription(0));
+					}
+				} catch (NullPointerException npe) {
+					// Data error, Do Not write record to file; log it
+					System.out.println("**** USER DATA ERROR ****");
+					System.out.println("Component Type Code: "  + aMessage[0].getComponentType().getCode());
+					System.out.println("Reason: "  + aMessage[0].getReason().get_value());
+					System.out.println("Type Code: "  + aMessage[0].getType().getCode());
+					if (aMessage[0].getType().getCode().equals("SYSERR")) {
+						System.out.println("Details: "  + aMessage[0].getDetails());						
+					}
+					System.out.println("Failed data:  " + custRecLine);
+				}
+			} catch (Exception e) {
+				System.out.println("**** BIG TIME ERROR ****");
+				// System error, write record to guaranteed delivery file
+				custRecListOut.add(custRecLine);
+				e.printStackTrace();
+			}
+    
+    }
+    
+    // Write the records for Guaranteed delivery
+  	FileIO fileIO = new FileIO();
+  	fileIO.deleteFileFromDisk();
+    if (!custRecListOut.isEmpty()) {
+    	fileIO.writeFileRecs(custRecListOut);
+    }
+
+	  System.out.println("End HubCompService");
+	  
+//		response.setContentType("text/plain");
+//		PrintWriter out = response.getWriter();
+//	    out.println("In MDM Customer Update Hub Comp Service.");
+
+	} //////////////////////////////////// End mainline
+/**
+	 * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		// TODO Auto-generated method stub
+	}
+	/**
+	 * Set language type code
+	 */
+	private LanguageType setLanguage(MDMCustomerRec custRec) {
+		LanguageType languageType = null;
+		
+		if (custRec.getPrefLang().trim().length() != 0) {
+			languageType = new LanguageType();
+			languageType.set_value(custRec.getPrefLang());
+		}
+		return languageType;
+	}
+	/**
+	 * Set Country Type
+	 */
+	private extension.hub.gme.com.CountryType setPersonCountry(MDMCustomerRec custRec) throws Exception {
+		CountryTrans countryTrans = new CountryTrans();
+		extension.hub.gme.com.CountryType country = new extension.hub.gme.com.CountryType();
+		country.setCode(countryTrans.getValue(custRec.getContactCountry()));
+		return country;
+	}
+	/**
+	 * Build party Contact Method
+	 */
+	private PartyContactMethod[] setPartyContactMethod(MDMCustomerRec custRec) {
+		PartyContactMethod[] aPartyContactMethod = null;
+		ArrayList<PartyContactMethod> alPartyContactMethod = new ArrayList<PartyContactMethod>();
+
+		// No "work email" in translation provided by MDM
+		if (custRec.getContactEmail().trim().length() != 0) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("Second Email", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100008"); // Secondary email
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();
+			contactMethod.setReferenceNumber(custRec.getContactEmail()); // Contact Email Address
+			contactMethodType.setCode("2");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+
+		if (custRec.getPersonalEmail().trim().length() != 0) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("Email", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100002");
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();
+			contactMethod = new ContactMethod();
+			contactMethod.setReferenceNumber(custRec.getPersonalEmail()); // Personal Email Address
+			contactMethodType.setCode("2");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+		if (custRec.getHomePhone().trim().length() != 0) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("Home Phone", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100007");
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();
+			contactMethod = new ContactMethod();
+			contactMethod.setReferenceNumber(custRec.getHomePhone()); // Home Phone
+			contactMethodType.setCode("1");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+		if (custRec.getCellPhone().trim().length() != 0) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("Mobile", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100005");
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();
+			contactMethod = new ContactMethod();
+			contactMethod.setReferenceNumber(custRec.getCellPhone()); // Cell Phone
+			contactMethodType.setCode("1");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+		if (custRec.getCellPhone().trim().length() != 0 && custRec.getPrefContMeth().equals("SMS")) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("SMS", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100004");
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();
+			contactMethod = new ContactMethod();
+			contactMethod.setReferenceNumber(custRec.getCellPhone()); // Cell Phone used for SMS
+			contactMethodType.setCode("1");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+		if (custRec.getWorkPhone().trim().length() != 0) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("Work Phone", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100006");
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();	
+			contactMethod = new ContactMethod();
+			contactMethod.setReferenceNumber(custRec.getWorkPhone()); // Work Phone
+			contactMethodType.setCode("1");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+		if (custRec.getWorkFax().trim().length() != 0) {
+			ContactMethod contactMethod = new ContactMethod();
+			PartyContactMethod partyContactMethod = new PartyContactMethod();
+			partyContactMethod = new PartyContactMethod();
+			partyContactMethod.setPreferredContactMethodIndicator(prefContMethInd("Fax", custRec.getPrefContMeth()));
+			ContactMethodUsageType contactMethodUsageType = new ContactMethodUsageType();
+			contactMethodUsageType.setCode("100003");
+			partyContactMethod.setUsage(contactMethodUsageType);
+			ContactMethodType contactMethodType = new ContactMethodType();
+			contactMethod = new ContactMethod();
+			contactMethod.setReferenceNumber(custRec.getWorkFax()); // Work Fax
+			contactMethodType.setCode("1");
+			contactMethod.setContactMethodType(contactMethodType);
+			partyContactMethod.setContactMethod(contactMethod);
+			alPartyContactMethod.add(partyContactMethod);
+		}
+	
+		if (!alPartyContactMethod.isEmpty()) {
+			aPartyContactMethod = new PartyContactMethod[alPartyContactMethod.size()];
+			alPartyContactMethod.toArray(aPartyContactMethod);
+		}
+
+		return aPartyContactMethod;
+	}
+/**
+ *  If the OOD value and Siebel values match set to true  
+ */
+	private boolean prefContMethInd(String ood, String sieb) {
+		boolean value = false;
+		
+		if (ood.equalsIgnoreCase(sieb.trim())) {
+			value = true;
+		}
+		return value;
+	}
+	/**
+	 * Set Gender
+	 */
+	private GenderType setGender(MDMCustomerRec custRec) {
+		GenderType gender = null;
+		
+		if (custRec.getGender().trim().length() != 0) {
+			gender = new GenderType();
+			if (custRec.getGender().trim().equals("M")) {
+				gender.setCode("M");
+			}
+			if (custRec.getGender().trim().equals("F")) {
+				gender.setCode("F");
+			}
+		}
+		return gender;
+	}
+	/**
+	 * Set Person Name
+	 */
+	private XPersonName[] setXPersonName(MDMCustomerRec custRec) {
+		XPersonName[] xPersonName = null;
+		
+//		if (custRec.getSalutation().trim().length() != 0 ||
+		if (custRec.getFirstName().trim().length() != 0 ||
+				custRec.getMiddleName().trim().length() != 0 ||
+				custRec.getLastName().trim().length() != 0) {
+					xPersonName = new XPersonName[1];
+					xPersonName[0] = new XPersonName();
+
+/*   Picklist in MDM and open text in OOD so decided to not send 					
+  		if (custRec.getSalutation().trim().length() != 0 ) {
+					  PrefixType prefixType = new PrefixType();
+					  prefixType.set_value(custRec.getSalutation());
+					  xPersonName[0].setPrefix(prefixType); // Salutation
+					}
+*/
+					if (custRec.getFirstName().trim().length() != 0) {
+						xPersonName[0].setGivenNameOne(custRec.getFirstName()); // First Name
+					}
+					if (custRec.getMiddleName().trim().length() != 0) {
+						xPersonName[0].setGivenNameTwo(custRec.getMiddleName()); // Middle Name
+					}
+					if (custRec.getLastName().trim().length() != 0) {
+						xPersonName[0].setLastName(custRec.getLastName()); // Last Name
+					}
+		}
+		return xPersonName;
+	}
+	/**
+	 * Set Party Admin key
+	 */
+	private PartyAdminSysKey[] setPartyAdminSysKey(MDMCustomerRec custRec) {
+		PartyAdminSysKey[] partyAdminSysKey = new PartyAdminSysKey[1];
+		partyAdminSysKey[0] = new PartyAdminSysKey();
+		AdminSystemType adminSystemType = new AdminSystemType();
+		adminSystemType.setCode("100001"); // Default value
+		adminSystemType.set_value("GME_SYS_CRMOD"); // Default value
+		partyAdminSysKey[0].setAdminSystemType(adminSystemType);	
+
+		if (custRec.getCacCustId().trim().length() != 0) {
+			partyAdminSysKey[0].setAdminSysPartyId(custRec.getCacCustId()); // CAC Customer Id (Row Id)
+		}
+		
+		return partyAdminSysKey;
+	}
+	/**
+	 * Set Address
+	 */
+	private PartyAddress[] setPartyAddress(MDMCustomerRec custRec) throws Exception {
+		PartyAddress[] partyAddress = null;
+		CountryTrans countryTrans = new CountryTrans();
+		
+/*		if (custRec.getCountry().trim().length() != 0 ||
+				custRec.getAddress1().trim().length() != 0 ||
+				custRec.getAddress2().trim().length() != 0 ||
+				custRec.getAddress3().trim().length() != 0 ||
+				custRec.getCity().trim().length() != 0 ||
+				custRec.getProvince().trim().length() != 0 ||
+				custRec.getPostCode().trim().length() != 0) {
+*/
+		if (custRec.getCountry().trim().length() != 0 &&
+				custRec.getAddress1().trim().length() != 0 &&
+				custRec.getCity().trim().length() != 0 ){
+					XAddress xAddress = new XAddress();
+					if (custRec.getCountry().trim().length() != 0) {
+						CountryType countryType = new CountryType();
+//						countryType.set_value(custRec.getCountry()); // Country
+						String code = countryTrans.getValue(custRec.getCountry());
+						countryType.setCode(code); // Country
+						xAddress.setCountry(countryType);
+					}
+					if (custRec.getAddress1().trim().length() != 0) {
+						xAddress.setAddressLineOne(custRec.getAddress1()); // Address Line 1
+					}
+					if (custRec.getAddress2().trim().length() != 0) {
+						xAddress.setAddressLineTwo(custRec.getAddress2()); // Address Line 2
+					}
+					if (custRec.getAddress3().trim().length() != 0) {
+						xAddress.setAddressLineThree(custRec.getAddress3()); // Address Line 3
+					}
+					if (custRec.getCity().trim().length() != 0) {
+						xAddress.setCity(custRec.getCity()); // City
+					}
+// MDM does not have a list for UK or NL so don't send (Vrindawan)
+//					if (custRec.getProvince().trim().length() != 0) {
+//						StateProvinceType stateProvinceType = new StateProvinceType();
+//						stateProvinceType.set_value(custRec.getProvince());
+//						xAddress.setStateProvince(stateProvinceType); // Province
+//					}
+					if (custRec.getPostCode().trim().length() != 0) {
+						xAddress.setZipPostalCode(custRec.getPostCode()); // Post Code
+					}
+
+					AddressUsageType addressUsageType = new AddressUsageType();
+					addressUsageType.setCode("100001");
+					
+					partyAddress = new PartyAddress[1];
+					
+					partyAddress[0] = new PartyAddress();
+					partyAddress[0].setUsage(addressUsageType);
+					if (custRec.getMailStopReason().trim().length() != 0) {
+						partyAddress[0].setUndeliveredReason(undeliverTrans(custRec)); // Mail Stop Reason
+					}
+					partyAddress[0].setAddress(xAddress);
+		}
+	
+		return partyAddress;
+	}
+	/**
+	 * Set Prev Preference
+	 * @throws ParseException 
+	 */
+	private UndeliveredReasonType undeliverTrans(MDMCustomerRec custRec) {
+		UndeliveredReasonType reasonType = new UndeliveredReasonType();
+		
+		if (custRec.getMailStopReason().trim().equals("Total Contact Stop")) {
+			reasonType.setCode("100001");
+		}
+		if (custRec.getMailStopReason().trim().equals("Deceased")) {
+			reasonType.setCode("100002");
+		}
+		if (custRec.getMailStopReason().trim().equals("Delete Customer")) {
+			reasonType.setCode("100003");
+		}
+		if (custRec.getMailStopReason().trim().equals("Duplicate Contact")) {
+			reasonType.setCode("100004");
+		}
+		return reasonType;
+	}
+	/**
+	 * Set Prev Preference
+	 * @throws ParseException 
+	 */
+	private PartyPrivPref[] setPartyPrivPref(MDMCustomerRec custRec) throws ParseException {
+		PartyPrivPref[] aPartyPrivPref = null;
+		ArrayList<PartyPrivPref> alPartyPrivPref = new ArrayList<PartyPrivPref>();
+
+		if (custRec.getAuthValue().trim().length() != 0) {
+			PartyPrivPref partyPrivPref = new PartyPrivPref();
+			PrivPrefReasonType privPrefReason = new PrivPrefReasonType();
+			privPrefReason.setCode("100007");
+			partyPrivPref.setPrivPrefReason(privPrefReason);
+			partyPrivPref.setValue(privPrefTrans(custRec.getAuthValue())); // Authorisation Value (Data Privacy)
+			if (custRec.getAuthValue().equalsIgnoreCase("true")) {
+				partyPrivPref.setStartDate(custRec.getGrantDate());
+			}
+			if (custRec.getAuthValue().equalsIgnoreCase("false")) {
+				partyPrivPref.setEndDate(custRec.getRevokeDate());
+			}
+			alPartyPrivPref.add(partyPrivPref);
+		}
+		if (custRec.getNeverEmail().trim().length() != 0) {
+			PartyPrivPref partyPrivPref = new PartyPrivPref();
+			PrivPrefReasonType privPrefReason = new PrivPrefReasonType();
+			privPrefReason.setCode("100002");
+			partyPrivPref.setPrivPrefReason(privPrefReason);
+			partyPrivPref.setValue(privPrefTrans(custRec.getNeverEmail())); // Never Email Again
+			alPartyPrivPref.add(partyPrivPref);
+		}
+		if (custRec.getNeverSmsMms().trim().length() != 0) {
+			PartyPrivPref partyPrivPref = new PartyPrivPref();
+			PrivPrefReasonType privPrefReason = new PrivPrefReasonType();
+			privPrefReason.setCode("100005");
+			partyPrivPref.setPrivPrefReason(privPrefReason);
+			partyPrivPref.setValue(privPrefTrans(custRec.getNeverSmsMms())); // Never SMS/MMS Again
+			alPartyPrivPref.add(partyPrivPref);
+		}
+// Mail stop reason
+		if (custRec.getNeverCall().trim().length() != 0) {
+			PartyPrivPref partyPrivPref = new PartyPrivPref();
+			PrivPrefReasonType privPrefReason = new PrivPrefReasonType();
+			privPrefReason.setCode("100003");
+			partyPrivPref.setPrivPrefReason(privPrefReason);
+			partyPrivPref.setValue(privPrefTrans(custRec.getNeverCall())); // Never Call Again
+			alPartyPrivPref.add(partyPrivPref);
+		}
+		if (custRec.getNeverMail().trim().length() != 0) {
+			PartyPrivPref partyPrivPref = new PartyPrivPref();
+			PrivPrefReasonType privPrefReason = new PrivPrefReasonType();
+			privPrefReason.setCode("100001");
+			partyPrivPref.setPrivPrefReason(privPrefReason);
+			partyPrivPref.setValue(privPrefTrans(custRec.getNeverMail())); // Never Mail Again
+			alPartyPrivPref.add(partyPrivPref);
+		}
+		if (custRec.getNeverFax().trim().length() != 0) {
+			PartyPrivPref partyPrivPref = new PartyPrivPref();
+			PrivPrefReasonType privPrefReason = new PrivPrefReasonType();
+			privPrefReason.setCode("100004");
+			partyPrivPref.setPrivPrefReason(privPrefReason);
+			partyPrivPref.setValue(privPrefTrans(custRec.getNeverFax())); // Never Fax Again/Authorization Value (Data Privacy)
+			alPartyPrivPref.add(partyPrivPref);
+		}
+		
+		if (!alPartyPrivPref.isEmpty()) {
+			aPartyPrivPref = new PartyPrivPref[alPartyPrivPref.size()];
+			alPartyPrivPref.toArray(aPartyPrivPref);
+		}
+	
+		return aPartyPrivPref;
+	}
+	/**
+	 * Translate preference
+	 */
+	private String privPrefTrans(String trans) {
+		if (Boolean.parseBoolean(trans)) {
+			return "Y";
+		} else {
+			return "N";
+		}
+	}
+	/**
+	 * Set Vehicle
+	 */
+	private XVehicleHolding setXVehicleHolding(MDMCustomerRec custRec) throws Exception {
+		XVehicleHolding xVehicleHolding = null;
+		CountryTrans countryTrans = new CountryTrans();
+		
+		if (custRec.getVin().trim().length() != 0 ||
+				custRec.getMake().trim().length() != 0 ||
+				custRec.getModel().trim().length() != 0 ||
+				custRec.getRegistrationNumber().trim().length() != 0 ||
+				custRec.getAlternateVin().trim().length() != 0 ||
+				custRec.getSonoNumber().trim().length() != 0 ||
+				custRec.getEngineNumber().trim().length() != 0 ||
+				custRec.getEngineCode().trim().length() != 0 ||
+				custRec.getTransmissionCode().trim().length() != 0 ||
+				custRec.getFuelTypeCd().trim().length() != 0 ||
+				custRec.getPackge().trim().length() != 0 ||
+				custRec.getSeries().trim().length() != 0 ||
+				custRec.getBodyStyle().trim().length() != 0 ||
+				custRec.getRoofStyle().trim().length() != 0 ||
+				custRec.getInteriorColor().trim().length() != 0 ||
+				custRec.getExteriorColorNumber().trim().length() != 0 ||
+				custRec.getExteriorColor().trim().length() != 0 ||
+				custRec.getBuildDate() != null ||
+				custRec.getBuildPlant().trim().length() != 0 ||
+				custRec.getRetailDate() != null) {
+				
+					xVehicleHolding = new XVehicleHolding();
+//					HoldingType holdingType = new HoldingType();
+//					holdingType.setCode("1");  // Default value 1 = vehicle
+//					xVehicleHolding.setType(holdingType);
+					
+					if (custRec.getVin().trim().length() != 0 ) {
+						xVehicleHolding.setVin(custRec.getVin()); // vin
+					}
+					if (custRec.getMake().trim().length() != 0 ) {
+						xVehicleHolding.setManufacturer(custRec.getMake()); // Make
+					}
+					if (custRec.getModel().trim().length() != 0 ) {
+						xVehicleHolding.setModel(custRec.getModel()); // Model
+					}
+					if (custRec.getRegistrationNumber().trim().length() != 0 ) {
+						xVehicleHolding.setVehRegNumber(custRec.getRegistrationNumber()); // Registration Number
+					}
+					if (custRec.getRegistrationDate() != null ) {
+						xVehicleHolding.setVehicleReRegDate(custRec.getRegistrationDate()); // Registration Date
+					}
+					if (custRec.getAlternateVin().trim().length() != 0 ) {
+						xVehicleHolding.setVehicleAlternateVIN(custRec.getAlternateVin()); // Alternate VIN
+					}
+					if (custRec.getSonoNumber().trim().length() != 0 ) {
+						xVehicleHolding.setVehicleSonoNumber(custRec.getSonoNumber()); // Sono Number
+					}
+//					if (custRec.getEngineNumber().trim().length() != 0 ) {
+//						xVehicleHolding.setOptionEngineCode(custRec.getEngineNumber()); // Engine Number
+//					}
+					// No mapping from OOD to MDM so leaving out
+//					if (custRec.getEngineCode().trim().length() != 0 ) {
+//						XEngineCode xEngineCode = new XEngineCode();
+//						xEngineCode.set_value(custRec.getEngineCode());
+//						xVehicleHolding.setEngine(xEngineCode); // Engine Code  ** translate
+//					}
+//					if (custRec.getTransmissionCode().trim().length() != 0 ) {
+//						xVehicleHolding.setOptionTransCode(custRec.getTransmissionCode()); // Transmission Code
+//					}
+//					if (custRec.getFuelTypeCd().trim().length() != 0 ) {
+//						XFuelCode xFuelCode = new XFuelCode();
+//						xFuelCode.set_value(custRec.getFuelTypeCd());
+//						xVehicleHolding.setFuel(xFuelCode); // FUEL_TYP-CD ** translate
+//					}
+//					if (custRec.getPackge().trim().length() != 0 ) {
+//						xVehicleHolding.setMarketOffPackage(custRec.getPackge()); // package
+//					}
+					// No mapping from OOD to MDM so leaving out
+//					if (custRec.getSeries().trim().length() != 0 ) {
+//						XSeriesCode xSeriesCode = new XSeriesCode();
+//						xSeriesCode.set_value(custRec.getSeries());
+//						xVehicleHolding.setSeries(xSeriesCode); // Series  ** translate
+//					}
+//					if (custRec.getBodyStyle().trim().length() != 0 ) {
+//						xVehicleHolding.setBodyStyleType(custRec.getBodyStyle()); // Body Style
+//					}
+//					if (custRec.getRoofStyle().trim().length() != 0 ) {
+//						xVehicleHolding.setRoofStyleType(custRec.getRoofStyle()); // Roof Style
+//					}
+//					if (custRec.getInteriorColor().trim().length() != 0 ) {
+//						xVehicleHolding.setInteriorColor(custRec.getInteriorColor()); // Interior Colour
+//					}
+//					if (custRec.getExteriorColorNumber().trim().length() != 0 ) {
+//						xVehicleHolding.setExteriorColorNumber(custRec.getExteriorColorNumber()); // Exterior Colour Number
+//					}
+//					if (custRec.getExteriorColor().trim().length() != 0 ) {
+//						xVehicleHolding.setExteriorColorName(custRec.getExteriorColor()); // Exterior Colour
+//					}
+					if (custRec.getCountryAssignedTo().trim().length() != 0 ) {
+						extension.hub.gme.com.CountryType countryAssigned = new extension.hub.gme.com.CountryType();  // Country Assigned to
+						countryAssigned.setCode(countryTrans.getValue(custRec.getCountryAssignedTo()));
+						xVehicleHolding.setCountryAssigned(countryAssigned);
+					}
+					if (custRec.getBuildDate() != null ) {
+						xVehicleHolding.setBuildDate(custRec.getBuildDate()); // Build Date
+					}
+					if (custRec.getBuildPlant().trim().length() != 0 ) {
+						xVehicleHolding.setBuildPlant(custRec.getBuildPlant()); // Build Plant
+					}
+					if (custRec.getRetailDate() != null ) {
+						xVehicleHolding.setRetailDate(custRec.getRetailDate()); // Retail Date
+					}
+		}
+		return xVehicleHolding;
+	}
+	
+	private Interaction[] setInteraction(MDMCustomerRec custRec) throws ParseException {
+		Interaction[] interaction = new Interaction[1];
+		interaction[0] = new Interaction();
+		interaction[0].setDescription(custRec.getSrNumber()); // SR number
+		interaction[0].setDate(custRec.getRegistrationDate()); // interaction date
+		interaction[0].setRecordedDate(custRec.getClosedDate()); // closure date
+		
+		InteractionStatusType interactionStatus = new InteractionStatusType();
+    // CAC Open Case Flag (Open, Closed, Canceled)
+    if (custRec.getCacOpenCase().equalsIgnoreCase("Open")) {
+    	interactionStatus.setCode("1");	// Active
+    } else {
+    	interactionStatus.setCode("2"); // InActive
+    }
+		interaction[0].setInteractionStatus(interactionStatus); // status
+		
+		return interaction;
+	}
+
+}
