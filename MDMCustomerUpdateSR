@@ -1,0 +1,127 @@
+package servlet;
+
+
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.ArrayList;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import properties.PropertiesFileReader;
+
+import datalist.MDMCustomerRec;
+
+/**
+ * Servlet implementation class MDMCustomerUpdateSR
+ */
+public class MDMCustomerUpdateSR extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+       
+    /**
+     * @see HttpServlet#HttpServlet()
+     */
+    public MDMCustomerUpdateSR() {
+        super();
+        // TODO Auto-generated constructor stub
+    }
+
+	/**
+	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    urn.crmondemand.xml.ServiceRequest.Query.QueryType queryType = new urn.crmondemand.xml.ServiceRequest.Query.QueryType();
+    urn.crmondemand.xml.ServiceRequest.Query.ServiceRequestQuery serviceRequestQueryParms = new urn.crmondemand.xml.ServiceRequest.Query.ServiceRequestQuery(); 
+    urn.crmondemand.xml.ServiceRequest.Query.ListOfServiceRequestQuery listOfServiceRequestQuery = new urn.crmondemand.xml.ServiceRequest.Query.ListOfServiceRequestQuery();
+    crmondemand.ServiceRequestQueryPage_Input ServiceRequestQueryPage_Input = new crmondemand.ServiceRequestQueryPage_Input();    crmondemand.ServiceRequest_PortTypeProxy portTypeProxy = new crmondemand.ServiceRequest_PortTypeProxy();
+    PropertiesFileReader pfr = new PropertiesFileReader();
+    String strUrl = pfr.getProperty("ServiceRequest", "OOD") + "/Services/Integration";
+  	portTypeProxy.setEndpoint(strUrl);
+    
+		ArrayList custRecListOut = new ArrayList();    
+		ArrayList custRecListIn = new ArrayList();
+    MDMCustomerRec custRec = new MDMCustomerRec();
+	    
+	  custRecListIn = (ArrayList) request.getAttribute("list");
+	  
+	  System.out.println("Start ServiceRequest");
+	  
+    int recordNumber = custRecListIn.size();
+    for (int i = 0; i < recordNumber; i++) {
+      String custRecLine = (String) custRecListIn.get(i);
+      try {
+      	custRec = new MDMCustomerRec();
+				custRec.parseRecord(custRecLine);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+      String searchSpec = "[Id] = \'" + custRec.getSrId() + "\'"; 
+
+      // set the columns to return
+      serviceRequestQueryParms.setAssetId(queryType);
+      serviceRequestQueryParms.setContactId(queryType);
+      serviceRequestQueryParms.setSRNumber(queryType);
+      serviceRequestQueryParms.setDtOpened(queryType);
+      serviceRequestQueryParms.setClosedTime(queryType);
+      serviceRequestQueryParms.setStatus(queryType);
+      serviceRequestQueryParms.setIndexedPick0(queryType);
+
+      // set the input parameters on service request
+      serviceRequestQueryParms.setSearchspec(searchSpec);
+      
+      // set the input parameters on LIST service request      
+      boolean recordCountNeeded = true;
+      BigInteger pageSize = BigInteger.valueOf(100);
+      BigInteger startRow = BigInteger.valueOf(0);
+      
+      listOfServiceRequestQuery.setPagesize(pageSize);
+      listOfServiceRequestQuery.setStartrownum(startRow);
+      listOfServiceRequestQuery.setServiceRequest(serviceRequestQueryParms);
+      listOfServiceRequestQuery.setRecordcountneeded(recordCountNeeded);
+
+      ServiceRequestQueryPage_Input.setListOfServiceRequest(listOfServiceRequestQuery);
+      crmondemand.ServiceRequestQueryPage_Output serviceRequestQueryPage = portTypeProxy.serviceRequestQueryPage(ServiceRequestQueryPage_Input);
+      
+      urn.crmondemand.xml.ServiceRequest.Data.ListOfServiceRequestData tebece0=serviceRequestQueryPage.getListOfServiceRequest();
+      
+      if (tebece0.getRecordcount().intValue() != 0) {
+//      	String junk = "asset: " + tebece0.getServiceRequest(0).getAssetId() + " contact: " + tebece0.getServiceRequest(0).getContactId();
+      	custRec.setAssetId(tebece0.getServiceRequest(0).getAssetId());
+      	custRec.setContactId(tebece0.getServiceRequest(0).getContactId());
+      	custRec.setSrNumber(tebece0.getServiceRequest(0).getSRNumber());
+      	custRec.setOpenedDate(tebece0.getServiceRequest(0).getDtOpened());
+      	custRec.setClosedDate(tebece0.getServiceRequest(0).getClosedTime());
+      	custRec.setCacOpenCase(tebece0.getServiceRequest(0).getStatus());
+      	custRec.setContactCountry(tebece0.getServiceRequest(0).getIndexedPick0());
+      }
+			// Put Customer Record on the out list
+    	custRecListOut.add(custRec.getFormattedRecord());
+    }
+	    
+	  System.out.println("End ServiceRequest");
+	  
+    ServletContext servletContext = request.getSession().getServletContext().getContext("/Contact");
+    RequestDispatcher rd = servletContext.getRequestDispatcher("/MDMCustomerUpdateContact");
+
+    request.setAttribute("list", custRecListOut);
+    if (rd != null) {
+    	rd.forward(request, response);
+    }
+//		response.setContentType("text/plain");
+//		PrintWriter out = response.getWriter();
+//	  out.println("In MDM Customer Update SR.");
+	}
+
+	/**
+	 * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		// TODO Auto-generated method stub
+	}
+
+}
