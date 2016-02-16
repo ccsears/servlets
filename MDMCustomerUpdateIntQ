@@ -1,0 +1,155 @@
+package servlet;
+
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import properties.PropertiesFileReader;
+
+import crmondemand.IntegrationEventWSLocator;
+import crmondemand.IntegrationEventWS_DeleteEvents_Input;
+import crmondemand.IntegrationEventWS_DeleteEvents_Output;
+import crmondemand.IntegrationEventWS_GetEvents_Input;
+import crmondemand.IntegrationEventWS_GetEvents_Output;
+import crmondemand.IntegrationEventWS_PortTypeProxy;
+
+import urn.crmondemand.xml.activity.Activity;
+import urn.crmondemand.xml.integrationevent.Event;
+import urn.crmondemand.xml.integrationevent.SiebelMessage;
+import urn.crmondemand.xml.servicerequest.ServiceRequest;
+
+import datalist.MDMCustomerRec;
+import fileIO.FileIO;
+
+/**
+ * Servlet implementation class IntegrationQueueServlet
+ */
+public class MDMCustomerUpdateIntQ extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+       
+    /**
+     * @see HttpServlet#HttpServlet()
+     */
+    public MDMCustomerUpdateIntQ() {
+        super();
+        // TODO Auto-generated constructor stub
+    }
+
+	/**
+	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    IntegrationEventWS_GetEvents_Input GetEvents_Input = new IntegrationEventWS_GetEvents_Input();
+    MDMCustomerRec custRec = new MDMCustomerRec();
+    IntegrationEventWS_PortTypeProxy PortTypeProxyid = new IntegrationEventWS_PortTypeProxy();
+    PropertiesFileReader pfr = new PropertiesFileReader();
+    String strUrl = pfr.getProperty("IntegrationQueue", "OOD") + "/Services/Integration";
+  	PortTypeProxyid.setEndpoint(strUrl);
+    
+    ArrayList<String> custRecListOut = new ArrayList<String>();
+ 	  String queueName = "MDM";
+    String serviceReqId = "";
+        
+	  System.out.println("Start Integration Q");
+
+    try {
+      // Read the file to get any old records.
+      FileIO fileIO = new FileIO();
+      try {
+  			custRecListOut.addAll(fileIO.readFileRecs());
+      } catch (FileNotFoundException fnf) {
+  			// Known state when not recovering, just ignore the condition.
+  		}
+  	  System.out.println("Records from file:  " + custRecListOut.size());
+  	  
+      GetEvents_Input.setQueueName(queueName);
+      //setup override
+ 	    IntegrationEventWS_GetEvents_Output getEvents17mtemp = PortTypeProxyid.getEvents(GetEvents_Input);
+	        
+	    Event[] typelistOfEvent22 = getEvents17mtemp.getListOfEvent();
+	//    String templistOfEvent22 = null;
+	    if (typelistOfEvent22 != null) { 
+	    	List<Event> listlistOfEvent22 = java.util.Arrays.asList(typelistOfEvent22);
+	//    	List listOut = new java.util.ArrayList();
+	    	for (int i = 0; i < typelistOfEvent22.length; i++) {
+	    		Event event22 = (Event) listlistOfEvent22.get(i);
+	    		SiebelMessage siebelMessage = event22.getSiebelMessage();
+	    		//************
+	    		// IF SR number is null discard it!!!!!!!!!
+	    		//************
+	    		// Check to see if an Activity was pulled from the queue
+	    		if (siebelMessage.getListOfActivity() != null) {
+	    			List<Activity> realSiebelMessageList = Arrays.asList(siebelMessage.getListOfActivity());
+	    			Activity activity = (Activity) realSiebelMessageList.get(0);
+	//    			listOut.add((realSiebelMessageList.size() + " " + event22.getObject() + " " + activity.getServiceRequestId()));// ActivityId()));
+	    			serviceReqId = activity.getServiceRequestId();
+	    		}
+	    		// Check to see if an SR was pulled from the queue
+	    		if (siebelMessage.getListOfServiceRequest() != null) {
+	    			List<ServiceRequest> realSiebelMessageList = Arrays.asList(siebelMessage.getListOfServiceRequest());
+	    			ServiceRequest serviceReq = (ServiceRequest) realSiebelMessageList.get(0);
+	//    			listOut.add((realSiebelMessageList.size() + " " + event22.getObject() + " " + serviceReq.getServiceRequestId()));
+	    			serviceReqId = serviceReq.getServiceRequestId();
+	    		}
+	    		//  If service request assigned keep it, otherwise ignore the record.
+	    		if (serviceReqId != null) {
+	    			custRec = new MDMCustomerRec();
+	    			custRec.setSrId(serviceReqId);
+	    			custRecListOut.add(custRec.getFormattedRecord());
+	    		}
+	    	}
+	    }
+	
+	    System.out.println("End Integration Q:  " + custRecListOut.size());
+	
+	    if (!custRecListOut.isEmpty()) {
+	      // Write the records for Guaranteed delivery
+	    	fileIO.writeFileRecs(custRecListOut);
+	    
+	    	// Remove all records from the queue
+//	    	IntegrationEventWS_DeleteEvents_Input deleteEvents_Input = new IntegrationEventWS_DeleteEvents_Input();
+//	    	deleteEvents_Input.setQueueName(queueName);
+// comment out the following line if want to leave data on the queue	
+//	    	IntegrationEventWS_DeleteEvents_Output deleteEvents2mtemp = PortTypeProxyid.deleteEvents(deleteEvents_Input);
+	
+	    // Link forward
+	     	ServletContext servletContext = request.getSession().getServletContext().getContext("/ServiceRequest");
+	    	RequestDispatcher rd = servletContext.getRequestDispatcher("/MDMCustomerUpdateSR"); 
+	    	request.setAttribute("list", custRecListOut);
+	    	if (rd != null) {
+	    		rd.forward(request, response);
+	    	}
+	    }
+	
+	   	System.out.println("End MDM Cust Update process");
+			
+			response.setContentType("text/plain");
+			PrintWriter out = response.getWriter();
+			out.println("End MDM Cust Update.  In Integration Queue");
+    } catch (Exception e) {
+    	response.setContentType("text/plain");
+    	PrintWriter out = response.getWriter();
+    	out.println("Integration Queue Error: " + e.getMessage());
+    	e.printStackTrace();
+    }
+	}
+
+	/**
+	 * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		// TODO Auto-generated method stub
+		System.err.println("Integration baby Post");
+	}
+
+}
