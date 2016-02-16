@@ -1,0 +1,157 @@
+package servlet;
+
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.ArrayList;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import properties.PropertiesFileReader;
+
+import datalist.MDMCustomerRec;
+
+/**
+ * Servlet implementation class MDMCustomerUpdateVehicle
+ */
+public class MDMCustomerUpdateVehicle extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+       
+    /**
+     * @see HttpServlet#HttpServlet()
+     */
+  public MDMCustomerUpdateVehicle() {
+      super();
+      // TODO Auto-generated constructor stub
+  }
+
+	/**
+	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		urn.crmondemand.xml.Vehicle.Query.VehicleQuery vehicleQuery = new urn.crmondemand.xml.Vehicle.Query.VehicleQuery();
+		urn.crmondemand.xml.Vehicle.Query.QueryType queryType = new urn.crmondemand.xml.Vehicle.Query.QueryType();
+    urn.crmondemand.xml.Vehicle.Query.ListOfVehicleQuery listOfVehicleQuery = new urn.crmondemand.xml.Vehicle.Query.ListOfVehicleQuery();
+    crmondemand.VehicleQueryPage_Input vehicleQueryPage_Input = new crmondemand.VehicleQueryPage_Input();
+    PropertiesFileReader pfr = new PropertiesFileReader();
+		crmondemand.Vehicle_PortTypeProxy portTypeProxy = new crmondemand.Vehicle_PortTypeProxy();
+    String strUrl = pfr.getProperty("Vehicle", "OOD") + "/Services/Integration";
+  	portTypeProxy.setEndpoint(strUrl);
+		
+	  System.out.println("Start Vehicle");
+	  
+    ArrayList<String> custRecListOut = new ArrayList<String>();    
+		ArrayList<String> custRecListIn = new ArrayList<String>();
+    MDMCustomerRec custRec = new MDMCustomerRec();
+	    
+    custRecListIn = (ArrayList<String>) request.getAttribute("list");
+	  
+    int recordNumber = custRecListIn.size();
+    for (int i = 0; i < recordNumber; i++) {
+      String custRecLine = (String) custRecListIn.get(i);
+      try {
+      	custRec = new MDMCustomerRec();
+				custRec.parseRecord(custRecLine);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			if (custRec.getAssetId().trim().length() != 0) {
+	      String searchSpec = "[Id] = \'" + custRec.getAssetId() + "\'"; 
+	      vehicleQuery.setSearchspec(searchSpec);
+	
+	      // Set the columns to return
+	      vehicleQuery.setVIN(queryType);
+	      vehicleQuery.setStMake(queryType);
+	      vehicleQuery.setStModel(queryType);
+	      vehicleQuery.setStRegistration_Number(queryType);
+	      vehicleQuery.setDDate_of_Registration(queryType);
+	      vehicleQuery.setStAlternate_VIN(queryType);
+	      vehicleQuery.setStSono_Number(queryType);
+	      vehicleQuery.setStEngine_Number(queryType);
+	      vehicleQuery.setEngine(queryType);
+	      vehicleQuery.setTransmission(queryType);
+	      vehicleQuery.setPlFuel_Type(queryType);
+	      vehicleQuery.setStPackage(queryType);
+	      vehicleQuery.setStSeries(queryType);
+	      vehicleQuery.setStBody_Style(queryType);
+	      vehicleQuery.setPlRoof_Style(queryType);
+	      vehicleQuery.setInteriorColor(queryType);
+	      vehicleQuery.setStExterior_Colour_Number(queryType);
+	      vehicleQuery.setStExterior_Colour(queryType);
+	      vehicleQuery.setPlCountry_Assigned_to(queryType);
+	      vehicleQuery.setDBuild_Date(queryType);
+	      vehicleQuery.setStBuild_Plant(queryType);
+	      vehicleQuery.setDRetail_Date(queryType);
+	      
+	      boolean recordCountNeeded = true;
+	      BigInteger pageSize = BigInteger.valueOf(100);
+	      BigInteger startRow = BigInteger.valueOf(0);
+	      
+	      // set the input parameters on Vehicle
+	      listOfVehicleQuery.setVehicle(vehicleQuery);
+	      
+	      listOfVehicleQuery.setPagesize(pageSize);
+	      listOfVehicleQuery.setStartrownum(startRow);
+	      listOfVehicleQuery.setRecordcountneeded(recordCountNeeded);
+	      
+	      vehicleQueryPage_Input.setListOfVehicle(listOfVehicleQuery);
+	      crmondemand.VehicleQueryPage_Output vehicleQueryPage = portTypeProxy.vehicleQueryPage(vehicleQueryPage_Input);
+	      
+	      urn.crmondemand.xml.Vehicle.Data.ListOfVehicleData tebece0 = vehicleQueryPage.getListOfVehicle();
+	      if (tebece0.getRecordcount().intValue() != 0) {
+	      	custRec.setVin(tebece0.getVehicle(0).getVIN()); // VIN
+    			custRec.setMake(tebece0.getVehicle(0).getStMake()); // Make
+    			custRec.setModel(tebece0.getVehicle(0).getStModel()); // Model
+    			custRec.setRegistrationNumber(tebece0.getVehicle(0).getStRegistration_Number()); //	Registration Number
+    			custRec.setRegistrationDate(tebece0.getVehicle(0).getDDate_of_Registration()); // Registration Date
+    			custRec.setAlternateVin(tebece0.getVehicle(0).getStAlternate_VIN()); // Alternate VIN
+    			custRec.setSonoNumber(tebece0.getVehicle(0).getStSono_Number()); // Sono Number
+    			custRec.setEngineNumber(tebece0.getVehicle(0).getStEngine_Number()); // Engine Number
+    			custRec.setEngineCode(tebece0.getVehicle(0).getEngine()); // Engine Code
+    			custRec.setTransmissionCode(tebece0.getVehicle(0).getTransmission()); // Transmission Code
+    			custRec.setFuelTypeCd(tebece0.getVehicle(0).getPlFuel_Type()); // FUEL_TYP-CD
+    			custRec.setPackge(tebece0.getVehicle(0).getStPackage()); //package
+    			custRec.setSeries(tebece0.getVehicle(0).getStSeries());// Series
+    			custRec.setBodyStyle(tebece0.getVehicle(0).getStBody_Style()); // Body Style
+    			custRec.setRoofStyle(tebece0.getVehicle(0).getPlRoof_Style()); // Roof Style
+    			custRec.setInteriorColor(tebece0.getVehicle(0).getInteriorColor()); // Interior Colour
+    			custRec.setExteriorColorNumber(tebece0.getVehicle(0).getStExterior_Colour_Number()); // Exterior Colour Number
+    			custRec.setExteriorColor(tebece0.getVehicle(0).getStExterior_Colour()); // Exterior Colour 
+    			custRec.setCountryAssignedTo(tebece0.getVehicle(0).getPlCountry_Assigned_to()); // Country Assigned To
+    			custRec.setBuildDate(tebece0.getVehicle(0).getDBuild_Date()); // Build Date
+    			custRec.setBuildPlant(tebece0.getVehicle(0).getStBuild_Plant()); // Build Plant
+    			custRec.setRetailDate(tebece0.getVehicle(0).getDRetail_Date()); //Retail Date
+	      }
+			}
+			// Put Customer Record on the out list
+    	custRecListOut.add(custRec.getFormattedRecord());
+    }
+		
+  	ServletContext servletContext = request.getSession().getServletContext().getContext("/HubCompService");
+  	RequestDispatcher rd = servletContext.getRequestDispatcher("/MDMCustomerUpdate");
+
+	  System.out.println("End Vehicle");
+	  
+  	request.setAttribute("list", custRecListOut);
+  	if (rd != null) {
+  		rd.forward(request, response);
+  	}
+		
+//		response.setContentType("text/plain");
+//		PrintWriter out = response.getWriter();
+//	    out.println("In MDM Customer Update Vehicle.");
+	}
+
+	/**
+	 * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		// TODO Auto-generated method stub
+	}
+
+}
