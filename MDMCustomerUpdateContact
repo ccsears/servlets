@@ -1,0 +1,233 @@
+package servlet;
+
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.ArrayList;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import properties.PropertiesFileReader;
+
+import datalist.MDMCustomerRec;
+
+/**
+ * Servlet implementation class MDMCustomerUpdateSR
+ */
+public class MDMCustomerUpdateContact extends HttpServlet {
+	private static final long serialVersionUID = 1L;
+       
+    /**
+     * @see HttpServlet#HttpServlet()
+     */
+  public MDMCustomerUpdateContact() {
+     super();
+       // TODO Auto-generated constructor stub
+  }
+
+	/**
+	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    urn.crmondemand.xml.Contact.Query.ContactQuery contactQuery = new urn.crmondemand.xml.Contact.Query.ContactQuery();
+    urn.crmondemand.xml.Contact.Query.QueryType queryType = new urn.crmondemand.xml.Contact.Query.QueryType();
+    urn.crmondemand.xml.Contact.Query.ListOfContactQuery listOfContactQuery = new urn.crmondemand.xml.Contact.Query.ListOfContactQuery();
+    crmondemand.ContactQueryPage_Input contactQueryPage_Input= new crmondemand.ContactQueryPage_Input();
+    crmondemand.Contact_PortTypeProxy portTypeProxy = new crmondemand.Contact_PortTypeProxy();
+    PropertiesFileReader pfr = new PropertiesFileReader();
+    String strUrl = pfr.getProperty("Contact", "OOD") + "/Services/Integration";
+  	portTypeProxy.setEndpoint(strUrl);
+	  
+    System.out.println("Start Contact");
+	  
+    ArrayList<String> custRecListOut = new ArrayList<String>();    
+		ArrayList<String> custRecListIn = new ArrayList<String>();
+    MDMCustomerRec custRec = new MDMCustomerRec();
+	    
+    custRecListIn = (ArrayList<String>) request.getAttribute("list");
+	  
+    int recordNumber = custRecListIn.size();
+    for (int i = 0; i < recordNumber; i++) {
+      String custRecLine = (String) custRecListIn.get(i);
+      try {
+      	custRec = new MDMCustomerRec();
+				custRec.parseRecord(custRecLine);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			if (custRec.getContactId().trim().length() != 0) {
+	      String searchSpec = "[Id] = \'" + custRec.getContactId() + "\'"; 
+	      contactQuery.setSearchspec(searchSpec);
+	
+	      // Set the columns to return
+	      contactQuery.setPlPreferred_Language(queryType); //Preferred language
+	      contactQuery.setContactType(queryType); // Contact Type
+	      contactQuery.setIndexedShortText0(queryType); // guid
+	      contactQuery.setPlPreferred_Contact_Method(queryType); // Preferred contact method 
+	      contactQuery.setContactEmail(queryType); //work email
+	      contactQuery.setStPersonal_Email_Address(queryType); //personal email
+	      contactQuery.setWorkPhone(queryType); // Work phone
+	      contactQuery.setCellularPhone(queryType); // Cell phone
+	      contactQuery.setHomePhone(queryType); // Home Phone
+	      contactQuery.setWorkFax(queryType); // Work Fax
+	      contactQuery.setGender(queryType); // Gender
+	      contactQuery.setStSalutation(queryType); // Salutation
+	      contactQuery.setContactFirstName(queryType); // First Name
+	      contactQuery.setMiddleName(queryType); // Middle name
+	      contactQuery.setContactLastName(queryType); // Last Name
+	      contactQuery.setId(queryType); // CAC Customer ID (row ID)
+	      contactQuery.setAlternateCountry(queryType); // Country
+	      contactQuery.setAlternateAddress1(queryType); // Address line 1
+	      contactQuery.setAlternateAddress2(queryType); // Address line 2
+	      contactQuery.setAlternateAddress3(queryType); // Address line 3
+	      contactQuery.setAlternateCity(queryType); // city
+	      contactQuery.setAlternateProvince(queryType); // province
+	      contactQuery.setAlternateZipCode(queryType); // postal code
+	      contactQuery.setBAuthorisation_Granted(queryType); // Authorization value
+	      contactQuery.setNeverEmail(queryType); // Never email
+	      contactQuery.setPlEmail_Again(queryType); // Never email 04/27/2012
+	      contactQuery.setBNever_SMSMMS(queryType); // Never SMS or MMS
+	      contactQuery.setPlSMSMMS(queryType); // Never SMS or MMS 04/27/2012
+	      contactQuery.setBNever_Fax_Again(queryType); // never fax
+	      contactQuery.setPlFax_Again(queryType); // never fax  04/27/2012
+	      contactQuery.setBNever_Mail_Again(queryType); // never mail
+	      contactQuery.setPlWhite_Mail_Again(queryType); // never mail  04/27/2012
+	      contactQuery.setPlMail_Stop_Reason(queryType); // Mail Stop Reason
+	      contactQuery.setPlMarketing_Preferences(queryType); // Mail Stop Reason 04/27/2012
+	      contactQuery.setPlCall_Again(queryType); // never call again  04/27/2012
+	      contactQuery.setDtRevoke_DateTime(queryType);  // Revoke date
+	      contactQuery.setDtGrant_DateTime(queryType);  // Grant date
+	      contactQuery.setStFacebook(queryType); // Facebook
+	      contactQuery.setStLinkedIn(queryType); // LinkedIn
+	      contactQuery.setStTwitter(queryType); // Twitter
+	      
+	      boolean recordCountNeeded = true;
+	      BigInteger pageSize = BigInteger.valueOf(100);
+	      BigInteger startRow = BigInteger.valueOf(0);
+	      
+	      // set the input parameters on Contact
+	      listOfContactQuery.setContact(contactQuery);
+	      
+	      listOfContactQuery.setPagesize(pageSize);
+	      listOfContactQuery.setStartrownum(startRow);
+	      listOfContactQuery.setRecordcountneeded(recordCountNeeded);
+	      
+	      contactQueryPage_Input.setListOfContact(listOfContactQuery);
+	      crmondemand.ContactQueryPage_Output contactQueryPage = portTypeProxy.contactQueryPage(contactQueryPage_Input);
+	      
+	      urn.crmondemand.xml.Contact.Data.ListOfContactData tebece0 = contactQueryPage.getListOfContact();
+	      if (tebece0.getRecordcount().intValue() != 0) {
+    			custRec.setPrefLang(tebece0.getContact(0).getPlPreferred_Language());
+					custRec.setType(tebece0.getContact(0).getContactType());
+					custRec.setGuid(tebece0.getContact(0).getIndexedShortText0());
+					custRec.setPrefContMeth(tebece0.getContact(0).getPlPreferred_Contact_Method()); 
+					custRec.setContactEmail(tebece0.getContact(0).getContactEmail());
+					custRec.setPersonalEmail(tebece0.getContact(0).getStPersonal_Email_Address());
+					custRec.setHomePhone(tebece0.getContact(0).getHomePhone());
+					custRec.setCellPhone(tebece0.getContact(0).getCellularPhone());
+					custRec.setWorkPhone(tebece0.getContact(0).getWorkPhone());
+//					custRec.setHomeFax(tebece0.getContact(0).gethome(???));
+					custRec.setWorkFax(tebece0.getContact(0).getWorkFax());
+					custRec.setGender(tebece0.getContact(0).getGender());
+					custRec.setSalutation(tebece0.getContact(0).getStSalutation());
+	      	custRec.setFirstName(tebece0.getContact(0).getContactFirstName());
+	      	custRec.setMiddleName(tebece0.getContact(0).getMiddleName());
+	      	custRec.setLastName(tebece0.getContact(0).getContactLastName());
+	      	custRec.setCacCustId(tebece0.getContact(0).getId());
+	      	custRec.setCountry(tebece0.getContact(0).getAlternateCountry());
+	      	custRec.setAddress1(tebece0.getContact(0).getAlternateAddress1());
+	      	custRec.setAddress2(tebece0.getContact(0).getAlternateAddress2());
+	      	custRec.setAddress3(tebece0.getContact(0).getAlternateAddress3());
+	      	custRec.setCity(tebece0.getContact(0).getAlternateCity());
+	      	custRec.setProvince(tebece0.getContact(0).getAlternateProvince());
+	      	custRec.setPostCode(tebece0.getContact(0).getAlternateZipCode());
+	      	if (tebece0.getContact(0).getBAuthorisation_Granted() != null) {
+	      		custRec.setAuthValue(tebece0.getContact(0).getBAuthorisation_Granted().toString());
+	      		// 2012-05-01 Reverse the OOD logic
+	      		// Dan Lee from GM requested to send N as Opt-In, and Y as Opt - Out
+//	      		Boolean auth = !(tebece0.getContact(0).getBAuthorisation_Granted());
+//	      		String MDMAuth = auth.toString();
+//	      		custRec.setAuthValue(MDMAuth);
+	      	}
+     			custRec.setGrantDate(tebece0.getContact(0).getDtGrant_DateTime());
+     			custRec.setRevokeDate(tebece0.getContact(0).getDtRevoke_DateTime());
+/*  04/27/2012     			
+	      	if (tebece0.getContact(0).getNeverEmail() != null){
+		      	custRec.setNeverEmail(tebece0.getContact(0).getNeverEmail().toString());	      		
+	      	}
+	      	if (tebece0.getContact(0).getBNever_SMSMMS() != null){
+	      		custRec.setNeverSmsMms(tebece0.getContact(0).getBNever_SMSMMS().toString());
+	      	}
+	      	if (tebece0.getContact(0).getBNever_Call_Again() != null) {
+	      		custRec.setNeverCall(tebece0.getContact(0).getBNever_Call_Again().toString());
+	      	}
+	      	if (tebece0.getContact(0).getBNever_Mail_Again() != null) {
+	      		custRec.setNeverMail(tebece0.getContact(0).getBNever_Mail_Again().toString());
+	      	}
+      		if (tebece0.getContact(0).getBNever_Fax_Again() != null) {
+	      		custRec.setNeverFax(tebece0.getContact(0).getBNever_Fax_Again().toString());
+	      	}
+*/
+//	      	custRec.setMailStopReason(tebece0.getContact(0).getPlMail_Stop_Reason());
+	      	if (tebece0.getContact(0).getPlEmail_Again().trim().length() != 0){
+		      	custRec.setNeverEmail(optTranslate(tebece0.getContact(0).getPlEmail_Again()));	      		
+	      	}
+	      	if (tebece0.getContact(0).getPlSMSMMS().trim().length() != 0){
+	      		custRec.setNeverSmsMms(optTranslate(tebece0.getContact(0).getPlSMSMMS()));
+	      	}
+	      	if (tebece0.getContact(0).getPlCall_Again().trim().length() != 0) {
+	      		custRec.setNeverCall(optTranslate(tebece0.getContact(0).getPlCall_Again()));
+	      	}
+	      	if (tebece0.getContact(0).getPlWhite_Mail_Again().trim().length() != 0) {
+	      		custRec.setNeverMail(optTranslate(tebece0.getContact(0).getPlWhite_Mail_Again()));
+	      	}
+//	      	if (tebece0.getContact(0).getPlMarketing_Preferences().trim().length() != 0) {
+//	      		custRec.setMailStopReason(optTranslate(tebece0.getContact(0).getPlMarketing_Preferences()));
+//	      	}
+	      	if (tebece0.getContact(0).getPlFax_Again().trim().length() != 0) {
+	      		custRec.setNeverFax(optTranslate(tebece0.getContact(0).getPlFax_Again()));
+	      	}
+	      	custRec.setFacebook(tebece0.getContact(0).getStFacebook());
+	      	custRec.setLinkedIn(tebece0.getContact(0).getStLinkedIn());
+	      	custRec.setTwitter(tebece0.getContact(0).getStTwitter());
+	      }
+			}
+			// Put Customer Record on the out list
+    	custRecListOut.add(custRec.getFormattedRecord());
+    }
+		
+    System.out.println("End Contact");
+		
+		ServletContext servletContext = request.getSession().getServletContext().getContext("/Vehicle");
+		RequestDispatcher rd = servletContext.getRequestDispatcher("/MDMCustomerUpdateVehicle");
+		request.setAttribute("list", custRecListOut);
+		if (rd != null) {
+			rd.forward(request, response);
+		}
+
+//		response.setContentType("text/plain");
+//		PrintWriter out = response.getWriter();
+//		out.println("In MDM Customer Update Contact.");
+	}
+	
+	private String optTranslate(String value) {
+		if (value.equals("Opt-Out")) {
+			return "True";
+		} else {
+			return "False";
+		}
+	}
+
+	/**
+	 * @see HttpServlet#doPost(HttpServletRequest request, HttpServletResponse response)
+	 */
+	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		// TODO Auto-generated method stub
+	}
+
+}
